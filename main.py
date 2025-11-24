@@ -1,6 +1,7 @@
 import os
 import logging
 from dotenv import load_dotenv
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from handlers import start, help_command, handle_message
 
