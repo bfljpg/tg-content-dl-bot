@@ -28,8 +28,10 @@ class MediaDownloader:
         os.makedirs(session_dir, exist_ok=True)
 
         try:
-            # Use yt-dlp for everything, as it's more robust with cookies
-            return self._download_ytdlp(url, session_dir)
+            if "instagram.com" in url:
+                return self._download_instagram(url, session_dir)
+            else:
+                return self._download_ytdlp(url, session_dir)
 
         except Exception as e:
             logger.error(f"Download failed: {e}")
@@ -37,6 +39,80 @@ class MediaDownloader:
             if os.path.exists(session_dir):
                 shutil.rmtree(session_dir)
             raise e
+
+    def _download_instagram(self, url: str, session_dir: str) -> Dict:
+        import instaloader
+        import re
+
+        # Extract shortcode
+        shortcode_match = re.search(r'(?:p|reel|tv)/([A-Za-z0-9_-]+)', url)
+        if not shortcode_match:
+            raise ValueError("Could not extract Instagram shortcode from URL.")
+        shortcode = shortcode_match.group(1)
+
+        # Configure Instaloader
+        L = instaloader.Instaloader(
+            download_pictures=True,
+            download_videos=True,
+            download_video_thumbnails=False,
+            download_geotags=False,
+            download_comments=False,
+            save_metadata=False,
+            compress_json=False,
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+
+        # Try to load session if username is configured
+        username = os.getenv("INSTAGRAM_USERNAME")
+        logger.info(f"Attempting to load session for username: '{username}'")
+        
+        if username:
+            try:
+                L.load_session_from_file(username)
+                logger.info(f"Successfully loaded Instagram session for {username}")
+            except FileNotFoundError:
+                logger.warning(f"Session file for {username} not found in CWD or Config dir. Running anonymously.")
+                # Try explicit path for Windows just in case
+                try:
+                    appdata = os.getenv('LOCALAPPDATA')
+                    if appdata:
+                        path = os.path.join(appdata, 'Instaloader', f'session-{username}')
+                        if os.path.exists(path):
+                            L.load_session_from_file(username, filename=path)
+                            logger.info(f"Loaded session from explicit path: {path}")
+                except Exception as ex:
+                    logger.error(f"Failed to load from explicit path: {ex}")
+
+            except Exception as e:
+                logger.error(f"Error loading session: {e}")
+
+        # Download
+        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        # Instaloader downloads to a directory named after the target. 
+        # We pass session_dir as the target.
+        L.download_post(post, target=session_dir)
+
+        # Gather files (filter out non-media)
+        files = []
+        for root, dirs, filenames in os.walk(session_dir):
+            for filename in filenames:
+                if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.mp4')):
+                    files.append(os.path.abspath(os.path.join(root, filename)))
+        
+        # Remove txt files if any (captions)
+        for root, dirs, filenames in os.walk(session_dir):
+            for filename in filenames:
+                if filename.lower().endswith('.txt'):
+                    os.remove(os.path.join(root, filename))
+
+        if not files:
+            raise Exception("No media files downloaded from Instagram.")
+
+        return {
+            'files': files,
+            'title': f"Instagram Post {shortcode}",
+            'session_dir': session_dir
+        }
 
     def _download_ytdlp(self, url: str, session_dir: str) -> Dict:
         ydl_opts = {
