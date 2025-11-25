@@ -121,9 +121,12 @@ class MediaDownloader:
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': True,
-            # Use cookies from the default browser (Chrome) to bypass login requirements
-            'cookiesfrombrowser': ('chrome',), 
-        }
+            # 'cookiesfrombrowser': ('chrome',), # Removed due to DPAPI decryption errors (https://github.com/yt-dlp/yt-dlp/issues/10927) 
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }],
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
