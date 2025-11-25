@@ -67,10 +67,29 @@ class MediaDownloader:
 
         # Download
         try:
+            # Instaloader sanitizes paths (e.g. replacing \ with ﹨), so we cannot pass a path as target.
+            # Instead, we use the session_id as the target (which creates a dir in CWD),
+            # and then move it to the desired session_dir.
+            session_id = os.path.basename(session_dir)
+            
             post = instaloader.Post.from_shortcode(L.context, shortcode)
-            # Instaloader downloads to a directory named after the target. 
-            # We pass session_dir as the target.
-            L.download_post(post, target=session_dir)
+
+            # Download to CWD/session_id
+            L.download_post(post, target=session_id)
+            
+            # Move downloaded files to session_dir
+            # We need to handle the case where session_dir already exists (created in download method)
+            temp_dir = os.path.abspath(session_id)
+            if os.path.exists(temp_dir) and temp_dir != os.path.abspath(session_dir):
+                # Move contents of temp_dir to session_dir
+                for item in os.listdir(temp_dir):
+                    s = os.path.join(temp_dir, item)
+                    d = os.path.join(session_dir, item)
+                    if os.path.exists(s):
+                        shutil.move(s, d)
+                # Remove the temp dir
+                os.rmdir(temp_dir)
+                
         except Exception as e:
             logger.warning(f"Instaloader raised an error: {e}. Checking if files were downloaded anyway...")
 
